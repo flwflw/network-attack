@@ -1,0 +1,99 @@
+import dpkt
+import socket
+import datetime
+from dpkt.compat import compat_ord
+
+#将MAC地址转换为可打印的字符串
+def mac_addr(address):
+    return ':'.join('%02x' % compat_ord(b) for b in address)
+
+#判断http
+def checkIfHTTPRes(data):
+    if data[:4] == str.encode('GET'):
+        return True
+    else:
+        return False
+
+def httpPacketParser(http):
+    if checkIfHTTPRes(http):
+        try:
+            request = dpkt.http.Request(http)
+            print(request.status)
+
+        except Exception as e:
+            pass
+
+def tcpPacketParser(tcp):
+    http = tcp.data
+    if len(http):
+        httpPacketParser(http)
+
+#数据包分析输出
+def Analysis_Pcap(pcap):
+    try:
+        #迭代pcap对象
+        for timestamp, buf in pcap:
+
+            print('Arrival Time: ', str(datetime.datetime.utcfromtimestamp(timestamp)))  # 包的抓取时间
+
+            eth = dpkt.ethernet.Ethernet(buf)  # 解析以太网帧
+
+            # 获得MAC地址并输出
+            src_mac = mac_addr(eth.src)
+            dst_mac = mac_addr(eth.dst)
+            print('MAC: src( %s )   dst( %s )   Type( %s )' % (src_mac, dst_mac, hex(eth.type)))
+
+            #解析ip包
+            ip = eth.data
+
+            # 把4字节IP地址转化成点分十进制的可读形式
+            src = socket.inet_ntoa(ip.src)
+            dst = socket.inet_ntoa(ip.dst)
+
+            # 提取标志信息
+            do_not_fragment = bool(ip.off & dpkt.ip.IP_DF)   #不分片位
+            more_fragments = bool(ip.off & dpkt.ip.IP_MF)   #更多分片位
+            fragment_offset = ip.off & dpkt.ip.IP_OFFMASK   #该片偏移原始数据包起始位置
+
+            print('IP: %s -> %s (len=%d ttl=%d DF=%d MF=%d offset=%d)' % (src, dst, ip.len, ip.ttl, do_not_fragment, more_fragments, fragment_offset))
+
+            print("sport= %d,dport= %d" % (eth.data.data.sport, eth.data.data.dport))
+
+            #传输层协议
+            if eth.data.data.__class__.__name__ == 'TCP':
+                # 解析tcp数据
+                tcp = ip.data
+                print("protocol:" + tcp.__class__.__name__)
+                # 解析tcp上层协议http
+                tcpPacketParser(tcp)
+            else:
+                print("protocol:" + eth.data.data.__class__.__name__)
+
+                request = dpkt.http.Request(tcp.data)
+                print("user-agent:" + request.headers['user-agent'])
+                print("request method:%s  request version:%s" % (request.method, request.version))
+
+            #print("\n")
+
+            if not isinstance(eth.data, dpkt.ip.IP):
+
+                print('Non IP Packet type not supported %s' % ip.__class__.__name__)
+
+                continue
+
+    except:
+        pass
+
+def main():
+
+    #'rb'按照二进制位进行读取
+    f =open('demo.pcap','rb')
+
+    dpcap = dpkt.pcap.Reader(f)
+
+    Analysis_Pcap(dpcap)
+
+    f.close()
+
+if __name__ =='__main__':
+    main()
