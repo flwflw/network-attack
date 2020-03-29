@@ -1,0 +1,15 @@
+from scapy.all import *
+
+#sniff回调函数
+def packet_callback(packet):
+    print(packet.show())
+
+pkts = sniff(filter="ip.src == 192.168.1.104 ", prn=lambda x:x.summary(), count=20)
+#参数说明
+#filter过滤，规则使用(BPF)
+#prn指定回调函数，每当一个符合filter的报文被探测到时，就会执行回调函数
+#count指定最多嗅探多少个报文
+#lambda x:x.summary()
+
+wrpcap("demo.pcap", pkts)
+
